@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>手写笔记</title>
+<style>
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; width: 100%; height: 100%;
+  overflow: hidden;
+  background: #e9e7e4;
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+#app { display: flex; width: 100%; height: 100%; }
+#toolbar {
+  flex: 0 0 78px; width: 78px; height: 100%;
+  background: #2c3138;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 14px 0; gap: 8px;
+  z-index: 10;
+}
+.tool-btn {
+  width: 58px; height: 58px; padding: 0;
+  border: none; border-radius: 14px;
+  background: transparent; color: #c9cfd8;
+  display: flex; align-items: center; justify-content: center;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+.tool-btn:active { background: rgba(255,255,255,.12); }
+.tool-btn.active { background: #43506b; color: #fff; }
+.tool-btn svg { width: 30px; height: 30px; }
+#stage { flex: 1; position: relative; overflow: hidden; background: #e9e7e4; }
+#canvas { position: absolute; inset: 0; display: block; touch-action: none; }
+
+.modal-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal-mask[hidden] { display: none; }
+.modal {
+  width: min(92vw, 360px);
+  background: #fff; border-radius: 16px; padding: 20px 20px 16px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.3);
+}
+.modal-title { font-size: 17px; font-weight: 600; color: #222; margin-bottom: 16px; }
+.modal-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 14px; color: #333; }
+.modal-row label { flex: 0 0 62px; }
+.modal-row input {
+  flex: 1; min-width: 0; padding: 9px 10px;
+  border: 1px solid #ccc; border-radius: 8px; font-size: 15px; color: #222;
+  user-select: text; -webkit-user-select: text;
+  touch-action: manipulation;
+}
+.modal-loc {
+  flex: 1; font-size: 13px; color: #666;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.modal-btn {
+  padding: 9px 14px; border: 1px solid #ccc; background: #fff;
+  border-radius: 8px; font-size: 14px; color: #333;
+  touch-action: manipulation; cursor: pointer;
+}
+.modal-btn.primary { background: #2f6fed; border-color: #2f6fed; color: #fff; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+.toast {
+  position: fixed; left: 50%; bottom: 42px; transform: translateX(-50%);
+  background: rgba(30,30,30,.92); color: #fff;
+  padding: 10px 18px; border-radius: 20px; font-size: 14px; z-index: 200;
+  max-width: 86vw; text-align: center;
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <button class="tool-btn active" id="btn-pen" title="笔">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+    </button>
+    <button class="tool-btn" id="btn-eraser" title="橡皮">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14l7-7 7 7-4 4H8l-4-4z"/><path d="M14 14l5-5 3 3-4 4"/><line x1="7" y1="18" x2="15" y2="18"/></svg>
+    </button>
+    <button class="tool-btn" id="btn-clear" title="清屏">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+    </button>
+    <button class="tool-btn" id="btn-zoomin" title="放大">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+    </button>
+    <button class="tool-btn" id="btn-zoomout" title="缩小">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+    </button>
+    <button class="tool-btn" id="btn-newpage" title="新建下一页">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+    </button>
+    <button class="tool-btn" id="btn-delpage" title="删除页面">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="19"/><line x1="15" y1="13" x2="9" y2="19"/></svg>
+    </button>
+    <button class="tool-btn" id="btn-delall" title="删除所有页面">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9.5 11l5 5"/><path d="M14.5 11l-5 5"/></svg>
+    </button>
+    <button class="tool-btn" id="btn-save" title="保存">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>
+  </div>
+  <div id="stage"><canvas id="canvas"></canvas></div>
+</div>
+
+<div id="saveModal" class="modal-mask" hidden>
+  <div class="modal">
+    <div class="modal-title">导出 PDF</div>
+    <div class="modal-row">
+      <label>文件名</label>
+      <input id="saveName" type="text" autocomplete="off" value="手写笔记">
+    </div>
+    <div class="modal-row">
+      <label>保存位置</label>
+      <span id="saveLoc" class="modal-loc"></span>
+      <button id="btnPickDir" class="modal-btn" hidden>选择位置…</button>
+    </div>
+    <div class="modal-actions">
+      <button id="btnCancelSave" class="modal-btn">取消</button>
+      <button id="btnConfirmSave" class="modal-btn primary">导出</button>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+'use strict';
+// ===== constants =====
+const A4_W = 595.276, A4_H = 841.89;   // A4 in points
+const RASTER = 3;                       // page-layer pixels per point
+const MIN_ZOOM = 0.5, MAX_ZOOM = 4;
+const ZOOM_STEP = 1.25;
+const PEN_W = 2.5;                      // stroke width in points
+const ERASER_R = 15;                    // eraser radius in screen px
+const PAN_DAMPING = 0.7;                // pan damping: page moves 70% of finger
+const PAN_SMOOTH = 0.35;                // pan smoothing factor per frame
+const PALM_ZONE = 0.25;                 // right quarter: touches starting here are treated as palm
+const RASTER_HIST = 1;                  // history-page snapshot resolution (px per point)
+const MAX_HIST = 10;                    // max history pages kept as visible snapshots
+const STORE_KEY = 'hanxie_notes_v1';
+const PREFS_KEY = 'hanxie_notes_prefs_v1';
+
+// ===== elements =====
+const stage = document.getElementById('stage');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const pageCanvas = document.createElement('canvas');
+pageCanvas.width = Math.round(A4_W * RASTER);
+pageCanvas.height = Math.round(A4_H * RASTER);
+const pctx = pageCanvas.getContext('2d');
+
+// ===== state =====
+let pages = [{ strokes: [] }];          // all pages, current = last
+let view = { zoom: 1, panX: 0, panY: 0 };
+let panTargetX = 0, panTargetY = 0;
+let panAnimating = false;
+let tool = 'pen';
+const active = new Map();               // pointerId -> {x,y} (screen css px, canvas-relative)
+const palms = new Set();                // pointerIds treated as palm (started in right zone), fully ignored
+let drawing = false;
+let drawPointerId = null;
+let panning = false;
+let lastPan = null;
+let currentStroke = null;
+let eraserPos = null;
+let eraseQueue = [];
+let eraseScheduled = false;
+let lastFileName = '手写笔记';
+let lastDirHandle = null;
+let lastDirName = '';
+let histCanvases = [];                  // snapshots of history pages (index-aligned with pages)
+let pageAnims = [];                     // per-page {cur,target} displayed vertical offset (screen px)
+let stackAnim = false;
+let activePageIndex = 0;                // the page currently being edited (live full-res layer)
+let deletePageMode = false;             // delete-page selection mode (pages highlighted)
+let confirmAllDelete = false;           // delete-all confirm state (all pages highlighted)
+let selectedDeletePage = -1;            // page selected for deletion (tap the same page again to delete)
+
+function round1(v) { return Math.round(v * 10) / 10; }
+
+// ===== view =====
+function viewOffset() {
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  return {
+    ox: (W - A4_W * view.zoom) / 2 + view.panX,
+    oy: (H - A4_H * view.zoom) / 2 + view.panY
+  };
+}
+function cssToA4OnPage(x, y, pageIndex) {
+  const o = viewOffset();
+  const a = pageAnims[pageIndex];
+  const off = a ? a.cur : pageOffsetFor(pageIndex, pages.length);
+  return [(x - o.ox) / view.zoom, (y - (o.oy + off)) / view.zoom];
+}
+function cssToA4(x, y) {
+  return cssToA4OnPage(x, y, activePageIndex);
+}
+function snapPan() {
+  panTargetX = Math.round(panTargetX);
+  panTargetY = Math.round(panTargetY);
+  view.panX = panTargetX;
+  view.panY = panTargetY;
+  panAnimating = false;
+}
+function startPanAnim() {
+  if (!panAnimating) { panAnimating = true; requestAnimationFrame(panTick); }
+}
+function panTick() {
+  const dx = panTargetX - view.panX;
+  const dy = panTargetY - view.panY;
+  if (!panning && Math.abs(dx) < 0.05 && Math.abs(dy) < 0.05) {
+    snapPan();
+    render();
+    return;
+  }
+  view.panX += dx * PAN_SMOOTH;
+  view.panY += dy * PAN_SMOOTH;
+  render();
+  if (panning || Math.abs(panTargetX - view.panX) > 0.05 || Math.abs(panTargetY - view.panY) > 0.05) {
+    requestAnimationFrame(panTick);
+  } else {
+    panning = false;
+    panAnimating = false;
+  }
+}
+
+// ===== page layer =====
+function clearPageLayer() {
+  pctx.setTransform(RASTER, 0, 0, RASTER, 0, 0);
+  pctx.clearRect(0, 0, A4_W, A4_H);
+  pctx.fillStyle = '#ffffff';
+  pctx.fillRect(0, 0, A4_W, A4_H);
+  pctx.strokeStyle = '#d5d2cc';
+  pctx.lineWidth = 0.6;
+  pctx.strokeRect(0.3, 0.3, A4_W - 0.6, A4_H - 0.6);
+}
+function tracePath(c, pts) {
+  const n = pts.length;
+  if (!n) return;
+  let prev = pts[0];
+  c.moveTo(prev[0], prev[1]);
+  for (let i = 1; i < n; i++) {
+    const p = pts[i];
+    const mx = (prev[0] + p[0]) / 2, my = (prev[1] + p[1]) / 2;
+    if (i === 1) c.lineTo(mx, my);
+    else c.quadraticCurveTo(prev[0], prev[1], mx, my);
+    prev = p;
+  }
+  c.lineTo(prev[0], prev[1]);
+}
+function paintStroke(c, s) {
+  const pts = s.points;
+  if (!pts.length) return;
+  c.strokeStyle = s.color;
+  c.fillStyle = s.color;
+  c.lineWidth = s.width;
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  if (pts.length === 1) {
+    c.beginPath();
+    c.arc(pts[0][0], pts[0][1], s.width / 2, 0, Math.PI * 2);
+    c.fill();
+    return;
+  }
+  c.beginPath();
+  tracePath(c, pts);
+  c.stroke();
+}
+function drawStrokeOnLayer(s) {
+  paintStroke(pctx, s);
+}
+function renderPageLayer(idx) {
+  clearPageLayer();
+  for (const s of pages[idx].strokes) paintStroke(pctx, s);
+}
+function redrawPageLayer() {
+  renderPageLayer(activePageIndex);
+}
+function redrawPageLayerFor(idx) {
+  if (idx === activePageIndex) {
+    renderPageLayer(activePageIndex);
+  } else {
+    histCanvases[idx] = renderPageToCanvas(pages[idx].strokes);
+  }
+}
+function switchActivePage(idx) {
+  if (idx === activePageIndex || idx < 0 || idx >= pages.length) return;
+  histCanvases[activePageIndex] = snapshotCurrentPage();
+  activePageIndex = idx;
+  histCanvases[activePageIndex] = null;
+  redrawPageLayer();
+}
+function renderPageToCanvas(strokes) {
+  const c = document.createElement('canvas');
+  c.width = Math.round(A4_W * RASTER_HIST);
+  c.height = Math.round(A4_H * RASTER_HIST);
+  const g = c.getContext('2d');
+  g.setTransform(RASTER_HIST, 0, 0, RASTER_HIST, 0, 0);
+  g.clearRect(0, 0, A4_W, A4_H);
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, A4_W, A4_H);
+  g.strokeStyle = '#d5d2cc';
+  g.lineWidth = 0.6;
+  g.strokeRect(0.3, 0.3, A4_W - 0.6, A4_H - 0.6);
+  for (const s of strokes) paintStroke(g, s);
+  return c;
+}
+function snapshotCurrentPage() {
+  const c = document.createElement('canvas');
+  c.width = Math.round(A4_W * RASTER_HIST);
+  c.height = Math.round(A4_H * RASTER_HIST);
+  const g = c.getContext('2d');
+  g.drawImage(pageCanvas, 0, 0, c.width, c.height);
+  return c;
+}
+function buildHistCanvases() {
+  histCanvases = [];
+  pageAnims = [];
+  const N = pages.length;
+  activePageIndex = N - 1;
+  for (let i = 0; i < N; i++) {
+    const t = pageOffsetFor(i, N);
+    pageAnims.push({ cur: t, target: t });
+    histCanvases.push(i === activePageIndex ? null : renderPageToCanvas(pages[i].strokes));
+  }
+}
+function startStackAnim() {
+  if (!stackAnim) { stackAnim = true; requestAnimationFrame(stackTick); }
+}
+function stackTick() {
+  const k = 0.25;
+  let done = true;
+  for (const a of pageAnims) {
+    const d = a.target - a.cur;
+    if (Math.abs(d) > 0.5) done = false;
+    a.cur = Math.abs(d) < 0.5 ? a.target : a.cur + d * k;
+  }
+  render();
+  if (done) { stackAnim = false; return; }
+  requestAnimationFrame(stackTick);
+}
+function newPage() {
+  // append a blank page at the end of the document flow.
+  // existing pages keep their positions, the view stays put, and the ACTIVE page is
+  // unchanged - the user scrolls down manually to reach the new page.
+  pages.push({ strokes: [] });
+  histCanvases.push(renderPageToCanvas([]));
+  const N = pages.length;
+  const t = pageOffsetFor(N - 1, N);
+  pageAnims.push({ cur: t, target: t });
+  render();
+  schedulePersist();
+}
+function centerOnActivePage() {
+  const a = pageAnims[activePageIndex];
+  const off = a ? a.cur : pageOffsetFor(activePageIndex, pages.length);
+  panTargetX = 0;
+  panTargetY = -off;
+  snapPan();
+  render();
+}
+function drawPageDirect(strokes, yOff) {
+  const o = viewOffset();
+  ctx.save();
+  ctx.translate(o.ox, o.oy + yOff);
+  ctx.scale(view.zoom, view.zoom);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, A4_W, A4_H);
+  ctx.strokeStyle = '#d5d2cc';
+  ctx.lineWidth = 0.6;
+  ctx.strokeRect(0.3, 0.3, A4_W - 0.6, A4_H - 0.6);
+  for (const s of strokes) paintStroke(ctx, s);
+  ctx.restore();
+}
+function pageHpx() { return A4_H * view.zoom; }
+function pageOffsetFor(i, N) { return i * pageHpx(); }
+function pageAtPoint(x, y) {
+  const o = viewOffset();
+  const pw = A4_W * view.zoom;
+  const ph = pageHpx();
+  const N = pages.length;
+  if (x < o.ox || x > o.ox + pw) return -1;
+  for (let i = 0; i < N; i++) {
+    const a = pageAnims[i];
+    const top = o.oy + (a ? a.cur : pageOffsetFor(i, N));
+    if (y >= top && y <= top + ph) return i;
+  }
+  return -1;
+}
+function deletePageAt(index) {
+  if (pages.length <= 1) {
+    pages[0].strokes = [];
+  } else {
+    pages.splice(index, 1);
+  }
+  buildHistCanvases();
+  redrawPageLayer();
+  centerOnActivePage();
+  render();
+  schedulePersist();
+}
+function deleteAllPages() {
+  pages = [{ strokes: [] }];
+  buildHistCanvases();
+  redrawPageLayer();
+  centerOnActivePage();
+  render();
+  schedulePersist();
+}
+function exitDeleteModes() {
+  deletePageMode = false;
+  confirmAllDelete = false;
+  selectedDeletePage = -1;
+  render();
+}
+function handleDeleteTap(e, p) {
+  if (confirmAllDelete) {
+    // in confirm state, a canvas tap just cancels (only the button's 2nd press deletes all)
+    exitDeleteModes();
+    return;
+  }
+  const idx = pageAtPoint(p.x, p.y);
+  if (idx < 0) { exitDeleteModes(); return; }
+  if (selectedDeletePage === idx) {
+    deletePageAt(idx);
+    exitDeleteModes();
+  } else {
+    selectedDeletePage = idx;
+    render();
+  }
+}
+
+// ===== render main =====
+function render() {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  const o = viewOffset();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#e9e7e4';
+  ctx.fillRect(0, 0, W, H);
+  const N = pages.length;
+  const pageH = A4_H * view.zoom;
+  // all pages flow continuously; the ACTIVE page is drawn from its live full-res layer
+  for (let i = 0; i < N; i++) {
+    const a = pageAnims[i];
+    const yOff = a ? a.cur : pageOffsetFor(i, N);
+    const yTop = o.oy + yOff;
+    if (yTop + pageH < 0 || yTop > H) continue; // off-screen
+    if (i === activePageIndex) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.22)';
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetY = 3;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(o.ox, yTop, A4_W * view.zoom, pageH);
+      ctx.restore();
+      ctx.drawImage(pageCanvas, o.ox, yTop, A4_W * view.zoom, pageH);
+    } else {
+      const hc = histCanvases[i];
+      if (hc) {
+        ctx.save();
+        ctx.translate(o.ox, yTop);
+        ctx.scale(view.zoom, view.zoom);
+        ctx.drawImage(hc, 0, 0, A4_W, A4_H);
+        ctx.restore();
+      } else {
+        drawPageDirect(pages[i].strokes, yOff);
+      }
+    }
+  }
+  // delete selection: highlight pages
+  if (deletePageMode || confirmAllDelete) {
+    const pw = A4_W * view.zoom;
+    const ph = pageHpx();
+    for (let i = 0; i < N; i++) {
+      const a = pageAnims[i];
+      const top = o.oy + (a ? a.cur : pageOffsetFor(i, N));
+      if (top + ph < 0 || top > H) continue;
+      ctx.fillStyle = 'rgba(220,60,60,0.15)';
+      ctx.fillRect(o.ox, top, pw, ph);
+      ctx.strokeStyle = 'rgba(220,60,60,0.9)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(o.ox, top, pw, ph);
+      if (deletePageMode && selectedDeletePage === i) {
+        ctx.fillStyle = 'rgba(220,60,60,0.35)';
+        ctx.fillRect(o.ox, top, pw, ph);
+        ctx.strokeStyle = '#c00';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(o.ox, top, pw, ph);
+      }
+    }
+  }
+  if (tool === 'eraser' && eraserPos) {
+    ctx.beginPath();
+    ctx.arc(eraserPos.x, eraserPos.y, ERASER_R, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(220,80,80,0.9)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+function sizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const W = stage.clientWidth, H = stage.clientHeight;
+  canvas.width = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  render();
+}
+window.addEventListener('resize', sizeCanvas);
+
+// ===== incremental stroke drawing =====
+function extendStroke(pt) {
+  const s = currentStroke;
+  const pts = s.points;
+  pts.push(pt);
+  const n = pts.length;
+  pctx.strokeStyle = s.color;
+  pctx.fillStyle = s.color;
+  pctx.lineWidth = s.width;
+  pctx.lineCap = 'round';
+  pctx.lineJoin = 'round';
+  if (n === 1) {
+    pctx.beginPath();
+    pctx.arc(pt[0], pt[1], s.width / 2, 0, Math.PI * 2);
+    pctx.fill();
+    return;
+  }
+  const a = pts[n - 2], b = pts[n - 1];
+  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+  pctx.beginPath();
+  if (n === 2) {
+    pctx.moveTo(a[0], a[1]);
+    pctx.lineTo(mx, my);
+  } else {
+    const c = pts[n - 3];
+    const mx2 = (c[0] + a[0]) / 2, my2 = (c[1] + a[1]) / 2;
+    pctx.moveTo(mx2, my2);
+    pctx.quadraticCurveTo(a[0], a[1], mx, my);
+  }
+  pctx.stroke();
+}
+function endCurrentStroke() {
+  if (currentStroke) {
+    if (currentStroke.points.length) drawStrokeOnLayer(currentStroke);
+    currentStroke = null;
+  }
+  schedulePersist();
+}
+function startStrokeAt(x, y) {
+  const pi = pageAtPoint(x, y);
+  const pageIdx = pi >= 0 ? pi : activePageIndex;
+  if (tool === 'eraser') {
+    eraserPos = { x, y };
+    const [ax, ay] = cssToA4OnPage(x, y, pageIdx);
+    queueErase(ax, ay, pageIdx);
+    return;
+  }
+  if (pageIdx !== activePageIndex) switchActivePage(pageIdx);
+  const [ax, ay] = cssToA4OnPage(x, y, activePageIndex);
+  currentStroke = { points: [[round1(ax), round1(ay)]], width: PEN_W, color: '#111111', page: activePageIndex };
+  pages[activePageIndex].strokes.push(currentStroke);
+  eraserPos = null;
+  render();
+}
+function crossPageStroke(x, y, targetIdx) {
+  // a stroke crossed into an adjacent page: split it at the shared edge so the
+  // two page strokes meet exactly at the boundary (seamless junction writing)
+  let guard = 0;
+  while (targetIdx !== activePageIndex && guard < pages.length) {
+    guard++;
+    const step = targetIdx > activePageIndex ? 1 : -1;
+    const nextIdx = activePageIndex + step;
+    if (nextIdx < 0 || nextIdx >= pages.length) break;
+    const o = viewOffset();
+    const zoom = view.zoom;
+    const ph = pageHpx();
+    const a = pageAnims[activePageIndex];
+    const activeTop = o.oy + (a ? a.cur : pageOffsetFor(activePageIndex, pages.length));
+    const boundary = step > 0 ? activeTop + ph : activeTop;
+    const pts = currentStroke ? currentStroke.points : [];
+    if (!pts.length) break;
+    const prev = pts[pts.length - 1];
+    const prevSX = o.ox + prev[0] * zoom;
+    const prevSY = activeTop + prev[1] * zoom;
+    const denom = y - prevSY;
+    let t = denom !== 0 ? (boundary - prevSY) / denom : 0;
+    t = Math.max(0, Math.min(1, t));
+    const cX = prevSX + t * (x - prevSX);
+    const cY = prevSY + t * (y - prevSY);
+    const cA = cssToA4OnPage(cX, cY, activePageIndex);
+    extendStroke([round1(cA[0]), round1(cA[1])]);
+    endCurrentStroke();
+    switchActivePage(nextIdx);
+    const nA = cssToA4OnPage(cX, cY, activePageIndex);
+    currentStroke = { points: [[round1(nA[0]), round1(nA[1])]], width: PEN_W, color: '#111111', page: activePageIndex };
+    pages[activePageIndex].strokes.push(currentStroke);
+  }
+  const fA = cssToA4OnPage(x, y, activePageIndex);
+  extendStroke([round1(fA[0]), round1(fA[1])]);
+  render();
+}
+
+// ===== eraser =====
+function segDist(ax, ay, bx, by, px, py) {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(px - ax, py - ay);
+  let t = ((px - ax) * dx + (py - ay) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+function eraseAt(ax, ay, pageIdx) {
+  const R = ERASER_R / view.zoom;
+  const page = pages[pageIdx];
+  const out = [];
+  let changed = false;
+  for (const s of page.strokes) {
+    const pts = s.points;
+    if (!pts.length) continue;
+    let keep = [];
+    let removed = false;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      let er = Math.hypot(p[0] - ax, p[1] - ay) < R;
+      if (!er && i < pts.length - 1) {
+        const q = pts[i + 1];
+        if (segDist(p[0], p[1], q[0], q[1], ax, ay) < R) er = true;
+      }
+      if (er) {
+        removed = true;
+        if (keep.length) { out.push({ points: keep, width: s.width, color: s.color }); keep = []; }
+      } else {
+        keep.push(p);
+      }
+    }
+    if (keep.length) out.push({ points: keep, width: s.width, color: s.color });
+    if (removed) changed = true;
+  }
+  page.strokes = out;
+  if (changed) redrawPageLayerFor(pageIdx);
+  return changed;
+}
+function queueErase(ax, ay, pageIdx) {
+  eraseQueue.push([ax, ay, pageIdx]);
+  if (!eraseScheduled) {
+    eraseScheduled = true;
+    requestAnimationFrame(processErase);
+  }
+}
+function processErase() {
+  eraseScheduled = false;
+  const q = eraseQueue;
+  eraseQueue = [];
+  for (const [x, y, pi] of q) eraseAt(x, y, pi);
+  render();
+}
+
+// ===== pointer handling =====
+function pointerPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+function overToolbar(p) { return p.x < 0; }
+function lastTriggeredPointerId() {
+  // active is a Map: insertion order == touch-down order, so the last key is the
+  // most recently touched real finger (the drawing basis on the left side).
+  let last = null;
+  for (const id of active.keys()) last = id;
+  return last;
+}
+function setDrawPointer(id) {
+  if (drawPointerId === id) return;
+  endCurrentStroke();
+  drawPointerId = id;
+  const p = active.get(id);
+  if (p && !overToolbar(p)) startStrokeAt(p.x, p.y);
+}
+function isPalmStart(p) {
+  return p.x > canvas.clientWidth * (1 - PALM_ZONE);
+}
+function demoteRightZonePalms() {
+  // In a multi-touch context, any pointer that STARTED in the right zone is the resting
+  // palm: move it from ctive to palms so it can never hijack the drawing basis
+  // basis. The FIRST touch stays real, so single-finger panning works everywhere,
+  // including the right half of the screen.
+  const boundary = canvas.clientWidth * (1 - PALM_ZONE);
+  for (const [id, p] of active) {
+    if (p.sx > boundary) {
+      active.delete(id);
+      palms.add(id);
+    }
+  }
+}
+function updateMode() {
+  // draw when: 2+ real fingers, OR 1 real finger while a palm is down / already drawing (latch)
+  const drawIntent = active.size >= 2 || (active.size >= 1 && (palms.size > 0 || drawing));
+  if (drawIntent) {
+    panning = false;
+    snapPan();
+    drawing = true;
+    setDrawPointer(lastTriggeredPointerId());
+  } else if (active.size === 1) {
+    drawing = false;
+    panning = true;
+    const rem = [...active.values()][0];
+    lastPan = rem;
+    panTargetX = view.panX;
+    panTargetY = view.panY;
+    startPanAnim();
+  } else {
+    drawing = false;
+    panning = false;
+  }
+  render();
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  const p = pointerPos(e);
+  if (deletePageMode || confirmAllDelete) {
+    handleDeleteTap(e, p);
+    return;
+  }
+  p.sx = p.x; // remember where this touch started
+  if (isPalmStart(p) && active.size >= 1) {
+    // Extra touch in the right zone while a real finger is already down -> resting palm.
+    palms.add(e.pointerId);
+  } else {
+    // First touch is always a real pointer (single-finger pan works on the whole screen),
+    // and touches outside the right zone are real fingers.
+    active.set(e.pointerId, p);
+  }
+  if (active.size + palms.size > 1) demoteRightZonePalms();
+  updateMode();
+});
+window.addEventListener('pointermove', (e) => {
+  if (!active.has(e.pointerId)) return;
+  e.preventDefault();
+  const cur = active.get(e.pointerId);
+  const p = pointerPos(e);
+  p.sx = cur.sx;
+  active.set(e.pointerId, p);
+  if (drawing) {
+    // drawing basis = the LAST touched real finger (right zone is palm, never a basis)
+    if (e.pointerId === drawPointerId) {
+      if (overToolbar(p)) {
+        // finger reached the toolbar: stop writing, let it tap tools
+        if (tool === 'pen' && currentStroke) endCurrentStroke();
+        eraserPos = null;
+      } else if (tool === 'pen') {
+        if (!currentStroke) {
+          startStrokeAt(p.x, p.y);
+        } else {
+          const pi = pageAtPoint(p.x, p.y);
+          const pageIdx = pi >= 0 ? pi : activePageIndex;
+          if (pageIdx !== activePageIndex) {
+            crossPageStroke(p.x, p.y, pageIdx);
+          } else {
+            const [ax, ay] = cssToA4OnPage(p.x, p.y, activePageIndex);
+            extendStroke([round1(ax), round1(ay)]);
+          }
+        }
+      } else {
+        // eraser works on the page under the finger (may cross pages too)
+        eraserPos = p;
+        const pi = pageAtPoint(p.x, p.y);
+        const pageIdx = pi >= 0 ? pi : activePageIndex;
+        const [ax, ay] = cssToA4OnPage(p.x, p.y, pageIdx);
+        queueErase(ax, ay, pageIdx);
+      }
+    }
+    render();
+  } else if (panning && active.size === 1) {
+    if (!overToolbar(p)) {
+      panTargetX += (p.x - lastPan.x) * PAN_DAMPING;
+      panTargetY += (p.y - lastPan.y) * PAN_DAMPING;
+    }
+    lastPan = p;
+    startPanAnim();
+  }
+});
+function endPointer(e) {
+  if (palms.has(e.pointerId)) {
+    palms.delete(e.pointerId);
+    updateMode();
+    return;
+  }
+  if (!active.has(e.pointerId)) return;
+  active.delete(e.pointerId);
+  if (drawing && e.pointerId === drawPointerId) {
+    endCurrentStroke();
+  }
+  eraserPos = null;
+  updateMode();
+}
+window.addEventListener('pointerup', endPointer);
+window.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// ===== tools =====
+function setTool(t) {
+  tool = t;
+  document.getElementById('btn-pen').classList.toggle('active', t === 'pen');
+  document.getElementById('btn-eraser').classList.toggle('active', t === 'eraser');
+  eraserPos = null;
+  render();
+}
+const btnLast = {};
+function bindBtn(id, action) {
+  const btn = document.getElementById(id);
+  const go = () => {
+    const now = Date.now();
+    if (btnLast[id] && now - btnLast[id] < 120) return;
+    btnLast[id] = now;
+    if (id !== 'btn-delpage' && id !== 'btn-delall') exitDeleteModes();
+    action();
+  };
+  btn.addEventListener('click', go);
+  // pointerup: a finger pressed on the canvas can select tools when it lifts over a button
+  btn.addEventListener('pointerup', go);
+}
+bindBtn('btn-pen', () => setTool('pen'));
+bindBtn('btn-eraser', () => setTool('eraser'));
+bindBtn('btn-clear', () => {
+  pages[activePageIndex].strokes = [];
+  redrawPageLayer();
+  render();
+  schedulePersist();
+});
+function zoomBy(f) {
+  snapPan();
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  const cx = W / 2, cy = H / 2;
+  const o = viewOffset();
+  const ax = (cx - o.ox) / view.zoom, ay = (cy - o.oy) / view.zoom;
+  const nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, view.zoom * f));
+  view.zoom = nz;
+  panTargetX = (cx - ax * nz) - (W - A4_W * nz) / 2;
+  panTargetY = (cy - ay * nz) - (H - A4_H * nz) / 2;
+  snapPan();
+  // pages stay edge-to-edge at any zoom (offsets scale with page height)
+  const N = pages.length;
+  for (let i = 0; i < N; i++) {
+    const t = pageOffsetFor(i, N);
+    if (pageAnims[i]) { pageAnims[i].target = t; pageAnims[i].cur = t; }
+  }
+  render();
+}
+bindBtn('btn-zoomin', () => zoomBy(ZOOM_STEP));
+bindBtn('btn-zoomout', () => zoomBy(1 / ZOOM_STEP));
+bindBtn('btn-newpage', newPage);
+bindBtn('btn-delpage', () => {
+  if (confirmAllDelete) exitDeleteModes();
+  if (!deletePageMode) {
+    deletePageMode = true;
+    selectedDeletePage = -1;
+    render();
+  } else {
+    exitDeleteModes();
+  }
+});
+bindBtn('btn-delall', () => {
+  if (deletePageMode) exitDeleteModes();
+  if (!confirmAllDelete) {
+    confirmAllDelete = true;
+    render();
+  } else {
+    deleteAllPages();
+    exitDeleteModes();
+  }
+});
+bindBtn('btn-save', openSaveDialog);
+
+// ===== persistence =====
+let persistTimer = null;
+function schedulePersist() {
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(persistNow, 400);
+}
+function persistNow() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({ pages: pages }));
+  } catch (_) {}
+}
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (data && Array.isArray(data.pages) && data.pages.length) pages = data.pages;
+    }
+    const prefs = JSON.parse(localStorage.getItem(PREFS_KEY));
+    if (prefs && prefs.name) lastFileName = prefs.name;
+  } catch (_) {}
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) persistNow(); });
+
+// ===== IndexedDB (remember last save folder) =====
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('hanxie_notes', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('kv');
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+async function idbGet(key) {
+  try {
+    const db = await idbOpen();
+    return await new Promise((res, rej) => {
+      const t = db.transaction('kv', 'readonly').objectStore('kv').get(key);
+      t.onsuccess = () => res(t.result);
+      t.onerror = () => rej(t.error);
+    });
+  } catch (_) { return null; }
+}
+async function idbSet(key, val) {
+  try {
+    const db = await idbOpen();
+    await new Promise((res, rej) => {
+      const t = db.transaction('kv', 'readwrite').objectStore('kv').put(val, key);
+      t.onsuccess = res;
+      t.onerror = () => rej(t.error);
+    });
+  } catch (_) {}
+}
+
+// ===== save dialog =====
+function sanitizeName(name) {
+  let n = String(name || '').trim().replace(/[\\/:*?"<>|]/g, '_');
+  if (!n) n = '手写笔记';
+  if (!/\.pdf$/i.test(n)) n += '.pdf';
+  return n;
+}
+async function openSaveDialog() {
+  const nameInput = document.getElementById('saveName');
+  const loc = document.getElementById('saveLoc');
+  const pickBtn = document.getElementById('btnPickDir');
+  nameInput.value = lastFileName;
+  const hasFS = typeof window.showDirectoryPicker === 'function';
+  pickBtn.hidden = !hasFS;
+  if (lastDirHandle) {
+    loc.textContent = lastDirName || '上次保存的位置';
+    pickBtn.textContent = '更改位置…';
+  } else {
+    loc.textContent = hasFS ? '未选择（将保存到下载文件夹）' : '浏览器下载文件夹';
+    pickBtn.textContent = '选择位置…';
+  }
+  document.getElementById('saveModal').hidden = false;
+  nameInput.focus();
+  nameInput.select();
+}
+function closeSaveDialog() {
+  document.getElementById('saveModal').hidden = true;
+}
+document.getElementById('btnCancelSave').addEventListener('click', closeSaveDialog);
+document.getElementById('btnPickDir').addEventListener('click', async () => {
+  try {
+    const dir = await window.showDirectoryPicker({ mode: 'readwrite' });
+    lastDirHandle = dir;
+    lastDirName = dir.name || '';
+    idbSet('lastDir', dir);
+    document.getElementById('saveLoc').textContent = dir.name || '已选择';
+    document.getElementById('btnPickDir').textContent = '更改位置…';
+  } catch (_) {}
+});
+document.getElementById('btnConfirmSave').addEventListener('click', async () => {
+  const name = sanitizeName(document.getElementById('saveName').value);
+  lastFileName = name.replace(/\.pdf$/i, '');
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ name: lastFileName })); } catch (_) {}
+  closeSaveDialog();
+  try {
+    const bytes = await buildPDF();
+    if (lastDirHandle) {
+      try {
+        const fh = await lastDirHandle.getFileHandle(name, { create: true });
+        const w = await fh.createWritable();
+        await w.write(bytes);
+        await w.close();
+        showToast('已保存：' + name);
+      } catch (err) {
+        showToast('保存失败：' + err.message);
+      }
+    } else {
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      showToast('已保存到下载文件夹：' + name);
+    }
+  } catch (err) {
+    showToast('保存失败：' + err.message);
+  }
+});
+
+// ===== toast =====
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+}
+
+// ===== PDF export =====
+function fmt(n) { return (Math.round(n * 100) / 100).toString(); }
+function buildStrokePath(s) {
+  const pts = s.points;
+  if (!pts.length) return '';
+  let out = fmt(s.width) + ' w\n';
+  const Y = (y) => A4_H - y;
+  if (pts.length === 1) {
+    const x = pts[0][0], y = Y(pts[0][1]);
+    const r = s.width / 2, k = 0.5522847498;
+    out += fmt(x - r) + ' ' + fmt(y) + ' m ';
+    out += fmt(x - r) + ' ' + fmt(y + k * r) + ' ' + fmt(x - k * r) + ' ' + fmt(y + r) + ' ' + fmt(x) + ' ' + fmt(y + r) + ' c ';
+    out += fmt(x + k * r) + ' ' + fmt(y + r) + ' ' + fmt(x + r) + ' ' + fmt(y + k * r) + ' ' + fmt(x + r) + ' ' + fmt(y) + ' c ';
+    out += fmt(x + r) + ' ' + fmt(y - k * r) + ' ' + fmt(x + k * r) + ' ' + fmt(y - r) + ' ' + fmt(x) + ' ' + fmt(y - r) + ' c ';
+    out += fmt(x - k * r) + ' ' + fmt(y - r) + ' ' + fmt(x - r) + ' ' + fmt(y - k * r) + ' ' + fmt(x - r) + ' ' + fmt(y) + ' c h f\n';
+    return out;
+  }
+  let prev = pts[0];
+  let prevMid = null;
+  out += fmt(prev[0]) + ' ' + fmt(Y(prev[1])) + ' m\n';
+  for (let i = 1; i < pts.length; i++) {
+    const p = pts[i];
+    const mx = (prev[0] + p[0]) / 2;
+    const my = (Y(prev[1]) + Y(p[1])) / 2;
+    if (i === 1) {
+      out += fmt(mx) + ' ' + fmt(my) + ' l\n';
+    } else {
+      const sx = prevMid[0], sy = prevMid[1];
+      const c1x = sx + (2 / 3) * (prev[0] - sx);
+      const c1y = sy + (2 / 3) * (Y(prev[1]) - sy);
+      const c2x = mx + (2 / 3) * (prev[0] - mx);
+      const c2y = my + (2 / 3) * (Y(prev[1]) - my);
+      out += fmt(c1x) + ' ' + fmt(c1y) + ' ' + fmt(c2x) + ' ' + fmt(c2y) + ' ' + fmt(mx) + ' ' + fmt(my) + ' c\n';
+    }
+    prevMid = [mx, my];
+    prev = p;
+  }
+  out += fmt(prev[0]) + ' ' + fmt(Y(prev[1])) + ' l\nS\n';
+  return out;
+}
+function pageContent(strokes) {
+  let s = 'q\n1 J\n1 j\n0 0 0 RG\n';
+  for (const st of strokes) s += buildStrokePath(st);
+  s += 'Q\n';
+  return s;
+}
+async function buildPDF() {
+  const n = pages.length;
+  const enc = new TextEncoder();
+  const chunks = [];
+  let pos = 0;
+  const offsets = [];
+  function write(b) { chunks.push(b); pos += b.length; }
+  function writeStr(s) { write(enc.encode(s)); }
+  function beginObj() {
+    offsets.push(pos);
+    writeStr(offsets.length + ' 0 obj\n');
+  }
+  writeStr('%PDF-1.4' + String.fromCharCode(10));
+  beginObj();
+  writeStr('<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  beginObj();
+  let kids = '';
+  for (let i = 0; i < n; i++) kids += (3 + i) + ' 0 R ';
+  writeStr('<< /Type /Pages /Kids [' + kids.trim() + '] /Count ' + n + ' >>\nendobj\n');
+  for (let i = 0; i < n; i++) {
+    beginObj();
+    writeStr('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + fmt(A4_W) + ' ' + fmt(A4_H) + '] /Contents ' + (3 + n + i) + ' 0 R >>\nendobj\n');
+  }
+  const streamBytes = [];
+  for (let i = 0; i < n; i++) {
+    streamBytes.push(enc.encode(pageContent(pages[i].strokes)));
+  }
+  for (const bytes of streamBytes) {
+    beginObj();
+    writeStr('<< /Length ' + bytes.length + ' >>\nstream\n');
+    write(bytes);
+    writeStr('\nendstream\nendobj\n');
+  }
+  const xrefPos = pos;
+  let xref = 'xref\n0 ' + (offsets.length + 1) + '\n';
+  xref += '0000000000 65535 f \n';
+  for (const off of offsets) {
+    xref += String(off).padStart(10, '0') + ' 00000 n \n';
+  }
+  xref += 'trailer\n<< /Size ' + (offsets.length + 1) + ' /Root 1 0 R >>\nstartxref\n' + xrefPos + '\n%%EOF\n';
+  writeStr(xref);
+  const bytes = new Uint8Array(pos);
+  let p = 0;
+  for (const c of chunks) { bytes.set(c, p); p += c.length; }
+  return bytes;
+}
+
+// ===== init =====
+loadState();
+buildHistCanvases();
+centerOnActivePage();
+idbGet('lastDir').then((h) => {
+  if (h && h.name) { lastDirHandle = h; lastDirName = h.name; }
+});
+sizeCanvas();
+redrawPageLayer();
+render();
+</script>
+</body>
+</html>
